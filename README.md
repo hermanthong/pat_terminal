@@ -107,6 +107,25 @@ flowchart LR
 
 ### A.3 Control Hierarchy
 
+Two loops share one job:
+
+- **Coarse loop** (camera → coarse_controller → gimbal): wide range, ~5 Hz bandwidth. Points and acquires.
+- **Fine loop** (IMU + camera → estimator → FSM): ±1 mrad range, 1 kHz. Holds lock and rejects vibration.
+
+**Acquisition.** The gimbal slews to the commanded bearing (from orbit knowledge / host) and holds. Bearing knowledge is assumed accurate to within the camera field of view (±5 mrad), so the spot lands on the detector without a search. On a valid spot, mode_manager commands HANDOFF.
+
+**Handoff.** The fine loop closes on the estimated error while the gimbal holds position. HANDOFF exits to LOCK when the error stays below 50 µrad for 200 ms. If that isn't met within 2000 ms, HANDOFF aborts back to ACQUIRE. Handoff is a real state with entry, exit, and abort criteria because the transient where the FSM first grabs the beam is where the failures live.
+
+**Lock and offload.** In LOCK the FSM owns the position error entirely. The gimbal ignores the camera and tracks a low-passed version (τ ≈ 1 s) of the FSM's deflection: it steers toward wherever the FSM is straining, and the FSM re-centers itself. Saturation is managed continuously instead of as an event; deflection > 90 % of range raises a health flag.
+
+**Consideration**: both loops consuming camera error simultaneously will fight unless carefully frequency-separated. Making the gimbal jump when the FSM nears its limit can turn FSM saturation into a sudden jolt that can break the lock, which may work, but requires a lot of tuning. With offload, one error signal has only one owner at a time, and the gimbal will move smoothly instead of jumping.
+
+**Loss of lock.** When the camera stops reporting a valid spot, the response is tiered:
+
+1. **COAST** — hold on IMU dead-reckoning for up to 500 ms (30 missed frames); brief dropouts usually self-heal, and re-acquiring over a one-frame gap would cost seconds of link.
+2. If the spot returns, re-enter LOCK through the same debounce as HANDOFF.
+3. Otherwise fall back to ACQUIRE — re-slew to the last known bearing.
+
 ### A.4 Timing and latency budget
 
 ### A.5 ROS2 middleware choices
