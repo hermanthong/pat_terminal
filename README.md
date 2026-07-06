@@ -26,6 +26,9 @@ This repo ships a Dockerfile. Uses ROS2 Humble.
 | Gimbal | max rate ~20°/s, closed-loop bandwidth ~5 Hz |
 | FSM | ±1 mrad optical range, ~1 kHz-class bandwidth, commanded at 1 kHz |
 
+> [!NOTE]
+> **Assumption**: These are assumed numbers from the description of the design challenge. All of them are parameters in the implementation.
+
 ### A.2 Node architecture
 
 ```mermaid
@@ -65,6 +68,9 @@ flowchart LR
 > [!NOTE]
 > exposure time should be used over publish time for accuracy's sake
 
+> [!NOTE]
+> **Assumption**: The two axes (azimuth/elevation) are decoupled and the camera is calibrated, so it reports angular error directly in the FSM's axes. On top of that, there's no rolling shutter artifacts, motion blur, nor distortion.
+
 #### imu_node
 - IMU driver
 - Handles calibration transformations
@@ -73,23 +79,20 @@ flowchart LR
 > [!NOTE]
 > There should not be any filters here. It is the estimator's job to calculate the beam's pointing error at any given time stamp, which is fused from the IMU + camera data.
 
-#### Estimator
-- Outputs where is the beam pointing right now
-- Complementary filter: propagates the error estimate from IMU rates every 1 ms, then
-  nudges it toward each camera measurement with a low-gain correction as frames arrive
-- The two sensors fail in opposite frequency bands (IMU drifts at DC, camera cannot see
-  vibration). this is the minimal fusion that exploits that
-- A missing or invalid camera frame means no correction that cycle — the estimate
-  coasts on IMU propagation, which is the same mechanism COAST relies on
-- O(1) fixed-cost arithmetic per cycle, no allocations — fit for the 1 kHz path
-
-> [!NOTE]
-> this is a component inside fine_controller, not a node of its own — the estimate feeds the control law at 1 kHz and must not cross a process boundary (see A.5)
-  
 #### fine_controller
 - Owns the FSM
 - Owns the pointing-error estimate
 - Publishes its own deflection state for the offload loop and for mode supervision
+
+- Estimator that outputs where is the beam pointing right now
+  - Complementary filter ([reference](https://www.olliw.eu/2013/imu-data-fusing/)): $\theta_k = \alpha (\theta_{k-1} + \omega_k \Delta t) + (1-\alpha) a_k$, where $\theta$ is the estimated position error, $\omega_k$ the IMU rate and $a_k$ the camera measurement.
+  - Each cycle is a weighted average of two opinions: the IMU-propagated prediction with weight α ≈ 0.95, and the camera measurement with weight 1−α. The blend only runs on cycles where a fresh valid frame arrived (60 Hz); propagation runs every 1 ms.
+  - The two sensors fail in opposite frequency bands. There is IMU drift, and the camera cannot see vibration. this is the minimal fusion that exploits that
+  - A missing or invalid camera frame is simply α = 1 for that cycle, meaning the estimate coasts on IMU propagation.
+  - O(1) fixed-cost arithmetic per cycle. fit for the high frequency 1 kHz path
+
+> [!NOTE]
+> **Alternative considered**: a latency-compensated estimator could be implemented instead by buffering IMU history and applying each camera correction at its measurement time. It is not needed at these numbers. With a small camera weight (1−α ≈ 0.05 per frame at 60 fps) the camera branch only has authority below f_c ≈ (1−α)·60/2π ≈ 0.5 Hz. Everything faster is corrected by the IMU at < 1 ms latency. Applying a 0.5 Hz signal 30 ms late gives a phase error of 2π·0.5·0.03 ≈ 0.1 rad, so the correction mis-aims by ~10% of the sub-Hz residual (~10 µrad in LOCK). I assume this is acceptable in this context.
 
 #### coarse_controller
 - Owns the gimbal
@@ -100,12 +103,12 @@ flowchart LR
   - Owns the state machine and is the single writer of `mode`
   - Exposes `set_mode` for the host to command
   - Modes:
-    - **IDLE** — powered and healthy, doing nothing. FSM centered, gimbal halted
-    - **ACQUIRE** — coarse control only owns position error. gimbal slews to the commanded bearing and holds, waiting for a valid spot
-    - **HANDOFF** — fine loop closes on the spot while the gimbal holds. Exits to LOCK on debounced low error, aborts back to ACQUIRE on timeout
-    - **LOCK** — fine control only owns position error.
-    - **COAST** — camera can't find the spot. Use IMU to keep still, then re-enter LOCK or fall back to ACQUIRE
-    - **SAFE** — FSM centered, gimbal halted, waiting for the host. reachable from every state
+    - **IDLE**: powered and healthy, doing nothing. FSM centered, gimbal halted
+    - **ACQUIRE**: coarse control only owns position error. gimbal slews to the commanded bearing and holds, waiting for a valid spot
+    - **HANDOFF**: fine loop closes on the spot while the gimbal holds. Exits to LOCK on debounced low error, aborts back to ACQUIRE on timeout
+    - **LOCK**: fine control only owns position error.
+    - **COAST**: camera can't find the spot. Use IMU to keep still, then re-enter LOCK or fall back to ACQUIRE
+    - **SAFE**: FSM centered, gimbal halted, waiting for the host. reachable from every state
 
 ```mermaid
 stateDiagram-v2
@@ -139,6 +142,9 @@ stateDiagram-v2
 - Abstracts the mothership interface.
 - Handles communication protocols
 
+> [!NOTE]
+> **Assumption**: The host is abstracted to the `set_mode` service and the telemetry topics. Everything else behind host_link is out of scope.
+
 ### A.3 Control Hierarchy
 
 Two loops share one job:
@@ -146,21 +152,27 @@ Two loops share one job:
 - **Coarse loop** (camera → coarse_controller → gimbal): wide range, ~5 Hz bandwidth. Points and acquires.
 - **Fine loop** (IMU + camera → estimator → FSM): ±1 mrad range, 1 kHz. Holds lock and rejects vibration.
 
-**Acquisition.** The gimbal slews to the commanded bearing (from orbit knowledge / host) and holds. Bearing knowledge is assumed accurate to within the camera field of view (±5 mrad), so the spot lands on the detector without a search. On a valid spot, mode_manager commands HANDOFF.
+> [!NOTE]
+> **Assumption**: The counterpart's beacon is always on. There's no atmospheric model, and all disturbance is platform-side: vibration plus slow relative drift.
+
+**Acquisition.** The gimbal slews to the commanded bearing (from orbit knowledge / host) and holds. On a valid spot, mode_manager commands HANDOFF.
+
+> [!NOTE]
+> **Assumption**: Bearing knowledge from the host is accurate to within the camera field of view, so the spot always lands on the detector without the need of a search scan.
 
 **Handoff.** The fine loop closes on the estimated error while the gimbal holds position. HANDOFF exits to LOCK when the error stays below 50 µrad for 200 ms. If that isn't met within 2000 ms, HANDOFF aborts back to ACQUIRE. Handoff is a real state with entry, exit, and abort criteria because the transient where the FSM first grabs the beam is where the failures live.
 
 **Lock and offload.** In LOCK the FSM owns the position error entirely. The gimbal ignores the camera and tracks a low-passed version (τ ≈ 1 s) of the FSM's deflection: it steers toward wherever the FSM is straining, and the FSM re-centers itself. Saturation is managed continuously instead of as an event.
 
 > [!NOTE]
-> Both loops consuming camera error simultaneously will fight unless carefully frequency-separated. Making the gimbal jump when the FSM nears its limit can turn FSM saturation into a sudden jolt that can break the lock, which may work, but requires a lot of tuning. With offload, one error signal has only one owner at a time, and the gimbal will move smoothly instead of jumping.
+> **Alternative considered**: Both loops consuming camera error simultaneously will fight unless carefully frequency-separated. Making the gimbal jump when the FSM nears its limit can turn FSM saturation into a sudden jolt that can break the lock, which may work, but requires a lot of tuning. With offload, one error signal has only one owner at a time, and the gimbal will move smoothly instead of jumping.
 
 #### Loss of lock
 When the camera stops reporting a valid spot, the response is tiered:
 
-1. **COAST** — hold on IMU dead-reckoning for up to 500 ms. Brief dropouts usually self-heal, and re-acquiring over a one-frame gap would cost seconds of link.
+1. **COAST**: hold on IMU dead-reckoning for up to 500 ms. Brief dropouts usually self-heal, and re-acquiring over a one-frame gap would cost seconds of link.
 2. If the spot returns, re-enter LOCK through the same debounce as HANDOFF.
-3. Otherwise fall back to ACQUIRE — re-slew to the last known bearing.
+3. Otherwise fall back to ACQUIRE. Re-slew to the last known bearing.
 
 ### A.4 Timing and latency budget
 
@@ -236,6 +248,12 @@ In order to build these, the following packages are required:
 1. fine_controller: 1 kHz loop
 1. coarse_controller: 60 Hz loop
 1. mode_manager: overall state machine
+
+> [!NOTE]
+> **Assumption**: One terminal is modeled. The counterpart is a fixed, slowly drifting bearing in the sim.
+
+> [!NOTE]
+> **Alternative considered**: simulated-clock testing (`use_sim_time`) for deterministic, faster-than-real-time tests. However, I will just implement the tests running with the wall clock due to time constraints.
 
 
 ---
