@@ -30,19 +30,24 @@ attach:
 # run these in docker container
 
 build:
-    source /opt/ros/humble/setup.bash && colcon build --symlink-install
+    colcon build --symlink-install && \
+    echo "To complete installation, run source /opt/ros/humble/setup.bash"
 
 run_node node:
-    source install/setup.bash && ros2 run pat_terminal {{node}}
+    ros2 run pat_terminal {{node}}
+
+run_sim:
+    ros2 run plant_sim plant_sim_node
 
 test:
-    source install/setup.bash && colcon test && colcon test-result --verbose
+    colcon test && colcon test-result --verbose
 
 auto_test:
     while true; do \
-        just build && just test; \
+        colcon build --symlink-install && just test; \
         inotifywait -qq -r -e modify,create,delete,move src; \
     done
 
-echo topic:
-    source install/setup.bash && ros2 topic echo {{topic}}
+# simulate host commands
+set_mode mode:
+    ros2 service call /set_mode pat_interfaces/srv/SetMode "{mode: {{mode}}}"

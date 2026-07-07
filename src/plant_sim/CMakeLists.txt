@@ -10,6 +10,17 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(pat_interfaces REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+
+add_executable(plant_sim_node src/plant_sim_node.cpp)
+target_include_directories(plant_sim_node PRIVATE include)
+ament_target_dependencies(plant_sim_node rclcpp pat_interfaces sensor_msgs std_msgs)
+
+install(TARGETS
+  plant_sim_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
