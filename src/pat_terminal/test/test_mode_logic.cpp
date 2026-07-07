@@ -25,3 +25,19 @@ TEST(ModeLogic, StartsIdleAndAcceptsAcquireRequest) {
   EXPECT_TRUE(logic.request(Mode::ACQUIRE));
   EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
 }
+
+TEST(ModeLogic, HostCanAlwaysCommandSafe) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  EXPECT_TRUE(logic.request(Mode::SAFE));
+  EXPECT_EQ(logic.mode(), Mode::SAFE);
+}
+
+TEST(ModeLogic, SafeRecoversOnlyToIdle) {
+  ModeLogic logic(params());
+  logic.request(Mode::SAFE);
+  EXPECT_FALSE(logic.request(Mode::ACQUIRE));
+  EXPECT_EQ(logic.mode(), Mode::SAFE);
+  EXPECT_TRUE(logic.request(Mode::IDLE));
+  EXPECT_EQ(logic.mode(), Mode::IDLE);
+}

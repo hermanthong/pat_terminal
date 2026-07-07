@@ -34,7 +34,9 @@ public:
   * @returns true if legal, false if illegal
   */
   bool request(Mode target) {
-    const bool legal = mode_ == Mode::IDLE && target == Mode::ACQUIRE;
+    const bool legal = target == Mode::SAFE ||
+      (mode_ == Mode::IDLE && target == Mode::ACQUIRE) ||
+      (mode_ == Mode::SAFE && target == Mode::IDLE);
     if (legal) {
       mode_ = target;
     }
