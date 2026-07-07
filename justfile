@@ -38,5 +38,11 @@ run_node node:
 test:
     source install/setup.bash && colcon test && colcon test-result --verbose
 
+auto_test:
+    while true; do \
+        just build && just test; \
+        inotifywait -qq -r -e modify,create,delete,move src; \
+    done
+
 echo topic:
     source install/setup.bash && ros2 topic echo {{topic}}

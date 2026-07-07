@@ -20,4 +20,12 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_estimator test/test_estimator.cpp)
+  target_include_directories(test_estimator PRIVATE include)
+  ament_add_gtest(test_mode_logic test/test_mode_logic.cpp)
+  target_include_directories(test_mode_logic PRIVATE include)
+endif()
+
 ament_package()

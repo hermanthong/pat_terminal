@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-launch-testing-ros \
     python3-matplotlib \
     curl ca-certificates \
+    inotify-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # install just
