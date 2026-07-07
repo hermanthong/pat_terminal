@@ -35,11 +35,11 @@ class FineController : public rclcpp::Node {
 public:
   FineController()
   : Node("fine_controller"),
-    alpha_(declare_parameter("alpha", 0.95)),
+    alpha_(declare_parameter("alpha", 0.9)),
     pi_params_{
       .kp = declare_parameter("kp", 0.5),
       .ki = declare_parameter("ki", 100.0),
-      .output_limit = declare_parameter("fsm_range_limit", 1e-3)},
+      .output_limit = declare_parameter("fsm_command_limit", 0.4e-3)},
     azimuth_{Estimator(alpha_), PIController(pi_params_)},
     elevation_{Estimator(alpha_), PIController(pi_params_)} {
     fsm_cmd_pub_ = create_publisher<AxisCommand>("fsm_cmd", 10);

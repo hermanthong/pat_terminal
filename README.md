@@ -40,7 +40,7 @@ flowchart LR
 
     FINE[fine_controller<br/>-estimator<br/>-FSM control law, 1 kHz]
 
-    COARSE[coarse_controller<br/>slew / offload, 100 Hz]
+    COARSE[coarse_controller<br/>-spot centering, 60 Hz]
     MODE[mode_manager<br/>state machine, 60 Hz]
     TEL[telemetry_node<br/>health + telemetry aggregation, 10 Hz]
     HOST[host_link<br/>mothership bridge]
@@ -52,7 +52,6 @@ flowchart LR
     FINE -- "/fsm_state" --> COARSE
     COARSE -- "/gimbal_cmd" --> ACT2[(Gimbal)]
     CAM -- "/position_error" --> MODE
-    FINE -- "/fsm_state" --> MODE
     MODE -- "/mode" --> FINE
     MODE -- "/mode" --> COARSE
     HOST -- "set_mode (service)" --> MODE
@@ -100,7 +99,7 @@ flowchart LR
 > **Alternative considered**: a latency-compensated estimator could be implemented instead by buffering IMU history and applying each camera correction at its measurement time. It is not needed at these numbers. With a small camera weight (1−α ≈ 0.05 per frame at 60 fps) the camera branch only has authority below f_c ≈ (1−α)·60/2π ≈ 0.5 Hz. Everything faster is corrected by the IMU at < 1 ms latency. Applying a 0.5 Hz signal 30 ms late gives a phase error of 2π·0.5·0.03 ≈ 0.1 rad, so the correction mis-aims by ~10% of the sub-Hz residual (~10 µrad in LOCK). I assume this is acceptable in this context.
 
 - PI control law that turns the estimated error into the FSM deflection command, per axis
-  - The command is clamped to the FSM range (±1 mrad), and the integrator is clamped while the output saturates (anti-windup), so a long saturation episode does not overshoot on recovery
+  - The command is clamped to a value tighter than the maximum hardware limit, and the integrator is clamped to the same limit, so a long saturation episode does not overshoot on recovery
 
 > [!NOTE]
 > **Alternative considered**: full PID control law. The derivative term is dropped because I assume that the vibrations will cause a high amount of noise measured by the IMU.
@@ -114,8 +113,8 @@ flowchart LR
 #### coarse_controller
 - Owns the gimbal
 - In ACQUIRE and HANDOFF, steers the gimbal to center the spot using the camera position error
-- Steering has a deadband (0.2 mrad): below it the gimbal holds and the residual belongs to the FSM alone. This is to prevent unnecessary gimbal oscillation during a lock.
-- In LOCK, offloads the FSM's average deflection instead (τ ≈ 1 s low-pass), so the FSM re-centers
+- Steering has a deadband (0.1 mrad): below it the gimbal holds and the residual belongs to the FSM alone. This is to prevent unnecessary gimbal oscillation during a lock.
+- In LOCK, offloads the FSM's average deflection instead (τ ≈ 5 s low-pass), so the FSM re-centers
   
 #### mode_manager
   - Owns the state machine and is the single writer of `mode`
@@ -151,7 +150,7 @@ stateDiagram-v2
 > `set_mode` is a service because the host must know if the command is accepted or rejected.
 
 > [!NOTE]
-> `mode` is distributed as a topic, not many per-node services. It is state that many nodes need, including ones that weren't alive when it changed (reliable + transient-local delivers the current mode to late joiners). Instead, mode_manager supervises behavior (`fsm_state`, `position_error`), and every controller holds a safe default until told otherwise.
+> `/mode` is distributed as a topic, not many per-node services. It is state that many nodes need, including ones that weren't alive when it changed (reliable + transient-local delivers the current mode to late joiners). Instead, mode_manager supervises behavior (`position_error`), and every controller holds a safe default until told otherwise.
 
 #### telemetry_node
 - Aggregates mode, health heartbeats, and key signals into a low-rate telemetry stream for the host. 
@@ -184,7 +183,10 @@ Two loops share one job:
 > [!NOTE]
 > The handoff entry threshold exists because a visible spot is not yet a reachable spot: the camera sees far beyond the ±1 mrad the FSM can reach. Handing off earlier saturates the FSM and strands the residual error where neither loop is finishing the job.
 
-**Lock and offload.** In LOCK the FSM owns the position error entirely. The gimbal ignores the camera and tracks a low-passed version (τ ≈ 1 s) of the FSM's deflection: it steers toward wherever the FSM is straining, and the FSM re-centers itself. Saturation is managed continuously instead of as an event.
+**Lock and offload.** In LOCK the FSM owns the position error entirely. The gimbal ignores the camera and tracks a low-passed version (τ ≈ 5 s) of the FSM's deflection: it steers toward wherever the FSM is straining, and the FSM re-centers itself. Saturation is managed continuously instead of as an event.
+
+> [!NOTE]
+> The offload is deliberately slow. The estimator cannot see gimbal motion (the IMU is on the platform, and the fine loop only compensates its own FSM commands), so the camera corrections must keep re-teaching the estimator while the gimbal walks. The offload error is roughly deflection × correction lag / τ, and τ ≈ 5 s keeps it below the vibration ripple. The offload only needs to outpace the 2 µrad/s drift, which it does by orders of magnitude.
 
 > [!NOTE]
 > **Alternative considered**: Both loops consuming camera error simultaneously will fight unless carefully frequency-separated. Making the gimbal jump when the FSM nears its limit can turn FSM saturation into a sudden jolt that can break the lock, which may work, but requires a lot of tuning. With offload, one error signal has only one owner at a time, and the gimbal will move smoothly instead of jumping.
@@ -200,12 +202,23 @@ A lock can also be lost with the spot still visible: if the error sustains beyon
 
 ### A.4 Timing and latency budget
 
+| Path | Rate | Latency | Hard real-time? |
+|---|---|---|---|
+| IMU → estimator → FSM command | 1 kHz | < 1 ms sensor to actuator | yes, the only one |
+| camera → estimator correction | 60 Hz | 30 ms | no |
+| camera → mode_manager supervision | 60 Hz | 30 ms | no |
+| camera steering / offload → gimbal | 60 Hz / 100 Hz | tens of ms | no |
+
+The only hard real-time path is the 1 kHz fine loop. Each cycle must finish within its 1 ms budget. The estimator and PI arithmetic are O(1), so the budget is spent on executor wakeup jitter, not computation.
+
+The slow camera path cannot contaminate the fast path by construction: the camera only enters the fine loop through the correction term with weight 1−α = 0.05, so a late, missing or invalid frame changes ver little about the 1 kHz cycle.
+
 ### A.5 ROS2 middleware choices
 #### QoS Profiles
 
 | Topic / service | Reliability | Durability | History | Reason |
 |---|---|---|---|---|
-| `/imu` | best effort | volatile | keep last 1 | The most recent sensor data is the most important |
+| `/imu_data` | best effort | volatile | keep last 1 | The most recent sensor data is the most important |
 | `/position_error` | best effort | volatile | keep last 1 | The most recent sensor data is the most important. validity flag + stamp let downstream nodes reason about gaps |
 | `/fsm_cmd`, `/gimbal_cmd` | best effort | volatile | keep last 1 | Only the last command matters |
 | `/fsm_state`, `/gimbal_state` | best effort | volatile | keep last 1 | Only the last command matters |
@@ -237,7 +250,7 @@ The fine_controller process is where starvation would hurt, so it is structured 
 DDS discovery means nodes can start in any order and links form whenever both ends exist.
 - `/mode` is transient-local, so any node that starts late (or restarts) receives
   the current mode immediately on subscription match.
-- Until a first mode message arrives, every controller is in the SAFE mode. A controller that boots mid-LOCK therefore behaves as if in SAFE until told otherwise, and mode_manager's supervision reacts to the resulting loss of lock as it would to any other.
+- Until a first mode message arrives, every controller behaves as in SAFE: the fine controller centers the FSM and the coarse controller holds the gimbal. A controller that boots mid-LOCK therefore does nothing until told otherwise.
 - Service clients use `wait_for_service` with timeout rather than assuming the server exists.
 
 > [!NOTE]
@@ -281,13 +294,14 @@ In order to build these, the following nodes are required:
 #### How plant_sim models the world
 A single node owns the ground truth: the true pointing error per axis.
 
-- For each axis, true error = disturbance − gimbal position − FSM deflection, per axis
+- For each axis, true error = counterpart bearing + disturbance − gimbal position − FSM deflection
 - Both actuators share one model: a first-order lag toward the command, a slew-rate limit, and a range clamp
   - The gimbal is the slow one: τ ≈ 32 ms (from the 5 Hz closed-loop bandwidth), 20°/s rate limit, wide range
   - The FSM is the fast one: ~1 kHz-class τ, ±1 mrad range
 - The camera samples the truth at 60 Hz, adds centroid noise, and stamps the message 30 ms in the past. The FOV is infinite, so the valid flag goes false only when a blockage is scripted
 - The IMU publishes the true platform rate plus a slow bias at 1 kHz
-- Blockage is scripted from the demo launch to drive the LOCK → COAST → re-lock story
+- Blockage is scripted by the integration test (or `just blockage`) to drive the LOCK → COAST → re-lock story
+- plant_sim plays the sensor and actuator drivers, so in the simulation it also publishes `/fsm_state` (the FSM's physical state) and exposes a sim-only `set_bearing` service to move the counterpart at runtime for manual testing purposes
 
 > [!NOTE]
 > The actuator model integrates with Euler's method at the 1 kHz sim tick, and the per-step fraction dt/τ is capped at 1. Without the cap, an actuator faster than the tick rate overshoots its command by dt/τ − 1 every step and diverges into banging between its range limits. The cap means such an actuator simply settles within the step, which is the physically correct limit behavior. I found this when the first closed-loop run drove the FSM to its range stop while commanding nearly zero, and the fix is pinned by a unit test.
@@ -318,9 +332,9 @@ A single node owns the ground truth: the true pointing error per axis.
 
 ### Results
 
-![PAT Integration Test Error Plot](docs/pat_demo_run.png)
+![PAT Integration Test Error Plot](docs/pat_integration_test.png)
 
-This demo run was recorded by `just plot`, which runs the integration test and records it, so the figure shows exactly the run the test suite asserts.
+This simulation run was recorded by `just plot`, which runs the integration test and records it, so the figure shows exactly the run the test suite asserts.
 
 - **ACQUIRE**: the gimbal slews down 100 / 50 mrad of initial offset at its rate limit, steered by the camera alone
 - **HANDOFF → LOCK**: once the error is within the FSM's authority, the fine loop closes and the lock debounce passes.

@@ -19,6 +19,7 @@ run_docker:
     docker start pat-dev 2>/dev/null || docker run -d --name pat-dev \
         -v {{repo}}/src:/ws/src \
         -v {{repo}}/justfile:/ws/justfile \
+        -v {{repo}}/docs:/ws/docs \
         pat sleep infinity
 
 stop_docker:
@@ -48,10 +49,6 @@ integration_test:
 
 plot:
     python3 src/plant_sim/scripts/plot_run.py
-
-# host side: copy the figure out of the container into log/
-fetch_plot:
-    mkdir -p log && docker cp pat-dev:/ws/log/pat_demo_run.png log/
 
 test:
     colcon test && colcon test-result --verbose

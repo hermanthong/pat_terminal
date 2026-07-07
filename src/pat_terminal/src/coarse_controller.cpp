@@ -33,10 +33,10 @@ class CoarseController : public rclcpp::Node {
 public:
   CoarseController()
   : Node("coarse_controller"),
-    offload_tau_(declare_parameter("offload_tau", 1.0)),
+    offload_tau_(declare_parameter("offload_tau", 5.0)),
     acquire_gain_(declare_parameter("acquire_gain", 0.3)),
     acquire_step_limit_(declare_parameter("acquire_step_limit", 5e-3)),
-    steering_deadband_(declare_parameter("steering_deadband", 200e-6)),
+    steering_deadband_(declare_parameter("steering_deadband", 100e-6)),
     azimuth_{LowPass(offload_tau_)},
     elevation_{LowPass(offload_tau_)} {
     gimbal_cmd_pub_ = create_publisher<AxisCommand>("gimbal_cmd", 10);

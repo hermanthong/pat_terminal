@@ -105,7 +105,7 @@ def plot(recorder, output):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output', default='log/pat_integration_test.png')
+    parser.add_argument('--output', default='docs/pat_integration_test.png')
     args = parser.parse_args()
 
     rclpy.init()
