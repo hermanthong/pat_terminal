@@ -271,18 +271,34 @@ In order to build these, the following packages are required:
 > [!NOTE]
 > **Alternative considered**: simulated-clock testing (`use_sim_time`) for deterministic, faster-than-real-time tests. However, I will just implement the tests running with the wall clock due to time constraints.
 
+#### How plant_sim models the world
+A single node owns the ground truth: the true pointing error per axis.
+
+- For each axis, true error = disturbance − gimbal position − FSM deflection, per axis
+- Both actuators share one model: a first-order lag toward the command, a slew-rate limit, and a range clamp
+  - The gimbal is the slow one: τ ≈ 32 ms (from the 5 Hz closed-loop bandwidth), 20°/s rate limit, wide range
+  - The FSM is the fast one: ~1 kHz-class τ, ±1 mrad range
+- The camera samples the truth at 60 Hz, adds centroid noise, and stamps the message 30 ms in the past. The valid flag goes false when the spot leaves the FOV or when a blockage is scripted
+- The IMU publishes the true platform rate plus a slow bias at 1 kHz
+- Blockage is scripted from the demo launch to drive the LOCK → COAST → re-lock story
+
+> [!NOTE]
+> disturbance is a slow bias drift plus a few fixed sinusoids due to platform vibration
+
+> [!NOTE]
+> **Assumption**: all angles are small and the axes are decoupled, so the contributions add linearly and each axis is simulated independently.
+
+> [!NOTE]
+> **Assumption**: the actuators are first-order only. This is sufficient to reproduces the behaviors the design must handle: lag, slew saturation and range saturation.
+
+> [!NOTE]
+> **Assumption**: sensor noise is gaussian, the camera latency is a constant 30 ms, and no frames are dropped except during scripted blockage. The IMU has bias drift.
 
 ---
 
 ### Part D: Next steps with more time or real hardware
-1. Record data and model the real gimbal and FSM, then re-tune both loop parameters and the handoff thresholds against measured dynamics.
-2. Measured vibration spectra from the actual platform replacing my assumed sinusoids;
-   the offload time constant and FSM control law both depend on where the energy is.
-3. RT kernel (PREEMPT_RT), SCHED_FIFO, locked memory, pinned CPU for the fine loop;
-   re-measure the timing histogram on target hardware.
-4. A search pattern in ACQUIRE for when bearing uncertainty exceeds the camera field
-   of view — the current design assumes it never does; then the latency-compensated
-   estimator.
-5. IMU glitch gating implemented and fault-injected in the test suite.
-6. Camera-to-FSM axis calibration procedure and cross-coupling terms in the plant.
-7. Pointing-ahead and platform-attitude feedforward from the host's orbit knowledge.
+1. Record data and model the real gimbal and FSM, then re-tune both loop parameters and the handoff thresholds against measured dynamics. I expect there to be some resonance and static friction with the real actuators, but that should be collected before being modelled in software. 
+1. I assumed that the vibration noised are sinusoids. To make the simulation more accurate, the real vibration spectra should be measured so it can be modelled more accurately.
+1. The code should be tested on real hardware. CPU and memory bottlenecks may be different on the actual PAT terminal computer, and these should be profiled.
+1. I assumed that the camera never exceeds the field of view of the camera. If this assumption is false, a new mode needs to be added where the gimbal searches for the spot.
+1. Adding more IMU glitches to the test suite.
