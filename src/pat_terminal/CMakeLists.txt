@@ -28,6 +28,8 @@ if(BUILD_TESTING)
   target_include_directories(test_mode_logic PRIVATE include)
   ament_add_gtest(test_pi_controller test/test_pi_controller.cpp)
   target_include_directories(test_pi_controller PRIVATE include)
+  ament_add_gtest(test_low_pass test/test_low_pass.cpp)
+  target_include_directories(test_low_pass PRIVATE include)
 endif()
 
 ament_package()
