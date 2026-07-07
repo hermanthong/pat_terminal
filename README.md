@@ -91,6 +91,10 @@ flowchart LR
   - A missing or invalid camera frame is simply α = 1 for that cycle, meaning the estimate coasts on IMU propagation.
   - O(1) fixed-cost arithmetic per cycle. fit for the high frequency 1 kHz path
 
+![Complementary filter block diagram](control_law.jpg)
+
+*The same filter seen in the frequency domain, diagram from [Shane Colton's blog](https://scolton.blogspot.com/2012/09/fun-with-complementary-filter-multiwii.html). The absolute sensor is low-passed and the integrated rate sensor is high-passed, and the two paths sum to 1. Here the camera replaces θ_accel and the IMU replaces θ_gyro.*
+
 > [!NOTE]
 > **Alternative considered**: a latency-compensated estimator could be implemented instead by buffering IMU history and applying each camera correction at its measurement time. It is not needed at these numbers. With a small camera weight (1−α ≈ 0.05 per frame at 60 fps) the camera branch only has authority below f_c ≈ (1−α)·60/2π ≈ 0.5 Hz. Everything faster is corrected by the IMU at < 1 ms latency. Applying a 0.5 Hz signal 30 ms late gives a phase error of 2π·0.5·0.03 ≈ 0.1 rad, so the correction mis-aims by ~10% of the sub-Hz residual (~10 µrad in LOCK). I assume this is acceptable in this context.
 
@@ -102,6 +106,9 @@ flowchart LR
 
 > [!NOTE]
 > **Alternative considered**: P-only control law. Simpler, but I expect constant disturbance (bias wind, platform tilt, IMU drift). Thus, there will still be significant error in a steady-state. The integrator accumulates until it cancels the bias, which is what holds the spot centered.
+
+> [!NOTE]
+> **Alternative considered**: a naive integrator with no anti-windup ([reference](https://en.wikipedia.org/wiki/Integral_windup)). During HANDOFF entry the error is large and the command saturates at the FSM range, but the integrator keeps accumulating error it cannot act on. When the error finally collapses, that stored integral pushes the command hard the other way, and the overshoot can break the lock that was just acquired. To prevent this, I decided to clamped the itegral contribution to the output limit.
 
 #### coarse_controller
 - Owns the gimbal
@@ -269,3 +276,13 @@ In order to build these, the following packages are required:
 
 ### Part D: Next steps with more time or real hardware
 1. Record data and model the real gimbal and FSM, then re-tune both loop parameters and the handoff thresholds against measured dynamics.
+2. Measured vibration spectra from the actual platform replacing my assumed sinusoids;
+   the offload time constant and FSM control law both depend on where the energy is.
+3. RT kernel (PREEMPT_RT), SCHED_FIFO, locked memory, pinned CPU for the fine loop;
+   re-measure the timing histogram on target hardware.
+4. A search pattern in ACQUIRE for when bearing uncertainty exceeds the camera field
+   of view — the current design assumes it never does; then the latency-compensated
+   estimator.
+5. IMU glitch gating implemented and fault-injected in the test suite.
+6. Camera-to-FSM axis calibration procedure and cross-coupling terms in the plant.
+7. Pointing-ahead and platform-attitude feedforward from the host's orbit knowledge.
