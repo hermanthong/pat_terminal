@@ -27,7 +27,9 @@ public:
    * @return the actual position after the step in rad
    */
   double step(double command, double dt) {
-    const double move = (dt / params_.tau) * (command - position_);
+    // dt / tau capped at 1. Any faster and it oscillates unstably.
+    const double fraction = std::min(dt / params_.tau, 1.0);
+    const double move = fraction * (command - position_);
     const double max_move = params_.rate_limit * dt;
     position_ += std::clamp(move, -max_move, max_move);
     position_ = std::clamp(position_, -params_.range_limit, params_.range_limit);

@@ -25,6 +25,13 @@ TEST(Actuator, RateLimitCapsTheSlew) {
   EXPECT_NEAR(result2, 10e-3, 1e-12);
 }
 
+// if dt > tau, the actuator must land on the command in one step.
+// otherwise, it will overshoot and oscillate unstably.
+TEST(Actuator, SettlesWithoutOvershootWhenTauIsShorterThanTheStep) {
+  Actuator actuator({.tau = 0.0001, .rate_limit = 1e9, .range_limit = 1e9});
+  EXPECT_NEAR(actuator.step(1e-3, 0.001), 1e-3, 1e-12);
+}
+
 TEST(Actuator, PositionStopsAtRangeLimit) {
   Actuator actuator({.tau = 0.01, .rate_limit = 1e9, .range_limit = 1e-3});
 

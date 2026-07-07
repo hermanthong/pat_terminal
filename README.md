@@ -283,16 +283,14 @@ A single node owns the ground truth: the true pointing error per axis.
 - Blockage is scripted from the demo launch to drive the LOCK → COAST → re-lock story
 
 > [!NOTE]
-> disturbance is a slow bias drift plus 2 fixed sinusoids due to platform vibration
+> The actuator model integrates with Euler's method at the 1 kHz sim tick, and the per-step fraction dt/τ is capped at 1. Without the cap, an actuator faster than the tick rate overshoots its command by dt/τ − 1 every step and diverges into banging between its range limits. The cap means such an actuator simply settles within the step, which is the physically correct limit behavior. I found this when the first closed-loop run drove the FSM to its range stop while commanding nearly zero, and the fix is pinned by a unit test.
 
 > [!NOTE]
-> **Assumption**: all angles are small and the axes are decoupled, so the contributions add linearly and each axis is simulated independently.
-
-> [!NOTE]
-> **Assumption**: the actuators are first-order only. This is sufficient to reproduces the behaviors the design must handle: lag, slew saturation and range saturation.
-
-> [!NOTE]
-> **Assumption**: sensor noise is gaussian, the camera latency is a constant 30 ms, and no frames are dropped except during scripted blockage. The IMU has bias drift.
+> **Assumptions**: 
+> - actuator disturbance can be modelled by a slow bias drift plus 2 fixed sinusoids due to platform vibration
+> - sensor noise is gaussian, the camera latency is a constant 30 ms, and no frames are dropped except during scripted blockage. The IMU has bias drift.
+> - all angles are small and the axes are decoupled, so the contributions add linearly and each axis is simulated independently.
+> - the actuators are first-order only. This is sufficient to reproduces the behaviors the design must handle: lag, slew saturation and range saturation.
 
 ---
 

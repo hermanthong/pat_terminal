@@ -31,7 +31,7 @@ attach:
 
 build:
     colcon build --symlink-install && \
-    echo "To complete installation, run source /opt/ros/humble/setup.bash"
+    echo "To complete installation, run: source install/setup.sh"
 
 run_node node:
     ros2 run pat_terminal {{node}}

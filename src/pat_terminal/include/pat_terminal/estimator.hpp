@@ -20,6 +20,11 @@ public:
   void correct(double measurement) {theta_ = alpha_ * theta_ + (1.0 - alpha_) * measurement;}
 
   /**
+  * @brief Seed the estimate, for HANDOFF entry with the first valid measurement
+  */
+  void reset(double initial) {theta_ = initial;}
+
+  /**
   * @return [rad] the current estimate of the pointing error
   */
   double estimate() const {return theta_;}

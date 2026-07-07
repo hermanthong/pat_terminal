@@ -10,14 +10,20 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(pat_interfaces REQUIRED)
 
 add_executable(mode_manager src/mode_manager.cpp)
 target_include_directories(mode_manager PRIVATE include)
 ament_target_dependencies(mode_manager rclcpp std_msgs pat_interfaces)
 
+add_executable(fine_controller src/fine_controller.cpp)
+target_include_directories(fine_controller PRIVATE include)
+ament_target_dependencies(fine_controller rclcpp sensor_msgs pat_interfaces)
+
 install(TARGETS
   mode_manager
+  fine_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 

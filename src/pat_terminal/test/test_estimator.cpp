@@ -13,6 +13,13 @@ TEST(Estimator, PropagateIntegratesRateOverTime) {
   EXPECT_NEAR(estimator.estimate(), 6e-6, 1e-12);
 }
 
+TEST(Estimator, ResetSeedsTheEstimate) {
+  Estimator estimator(0.95);
+  estimator.propagate(0.1, 0.001);
+  estimator.reset(300e-6);
+  EXPECT_NEAR(estimator.estimate(), 300e-6, 1e-12);
+}
+
 TEST(Estimator, CorrectBlendsTowardMeasurement) {
   Estimator estimator(0.95);
   estimator.propagate(0.1, 0.001);
