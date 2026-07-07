@@ -133,6 +133,77 @@ TEST(ModeLogic, LockCoastsOnlyAfterContinuousSpotLoss) {
   EXPECT_EQ(logic.mode(), Mode::COAST);
 }
 
+TEST(ModeLogic, CoastRelocksOnDebouncedSpotReturn) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
+
+  // t > 200 ms of low error, debounce complete
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.025, .spot_valid = true, .error = 20e-6});
+  }
+  ASSERT_EQ(logic.mode(), Mode::LOCK);
+
+  // t < 100 ms without the spot
+  for (int i = 0; i < 4; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = false, .error = 0.0});
+    ASSERT_EQ(logic.mode(), Mode::LOCK);
+  }
+
+  // t > 100 ms without the spot
+  logic.tick({.dt = 0.025, .spot_valid = false, .error = 0.0});
+  ASSERT_EQ(logic.mode(), Mode::COAST);
+
+  // t > 200ms with the spot
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = true, .error = 20e-6});
+    EXPECT_EQ(logic.mode(), Mode::COAST);
+  }
+
+  logic.tick({.dt = 0.025, .spot_valid = true, .error = 20e-6});
+  EXPECT_EQ(logic.mode(), Mode::LOCK);
+}
+
+TEST(ModeLogic, CoastFallsBackToAcquireOnTimeout) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
+
+  // t > 200 ms of low error, debounce complete
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.025, .spot_valid = true, .error = 20e-6});
+  }
+
+  // t > 100 ms without the spot, COAST entered on the final tick
+  for (int i = 0; i < 4; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = false, .error = 0.0});
+  }
+
+  logic.tick({.dt = 0.025, .spot_valid = false, .error = 0.0});
+  ASSERT_EQ(logic.mode(), Mode::COAST);
+
+  // t = 480 ms in COAST, the spot never returns
+  for (int i = 0; i < 24; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = false, .error = 0.0});
+    EXPECT_EQ(logic.mode(), Mode::COAST);
+  }
+
+  // t > 500 ms
+  logic.tick({.dt = 0.025, .spot_valid = false, .error = 0.0});
+  EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
+}
+
+TEST(ModeLogic, SafeIgnoresTicks) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
+  EXPECT_TRUE(logic.request(Mode::SAFE));
+
+  logic.tick({.dt = 1.0, .spot_valid = true, .error = 20e-6});
+  logic.tick({.dt = 1.0, .spot_valid = false, .error = 0.0});
+  EXPECT_EQ(logic.mode(), Mode::SAFE);
+}
+
 TEST(ModeLogic, SafeRecoversOnlyToIdle) {
   ModeLogic logic(params());
   logic.request(Mode::SAFE);

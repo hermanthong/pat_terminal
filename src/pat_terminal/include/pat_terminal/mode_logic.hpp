@@ -44,12 +44,7 @@ public:
         break;
       case Mode::HANDOFF:
         time_in_mode_s_ += inputs.dt;
-        // Time below the lock threshold accumulates, any bad tick restarts it.
-        if (inputs.spot_valid && inputs.error < params_.lock_error_threshold) {
-          lock_debounce_s_ += inputs.dt;
-        } else {
-          lock_debounce_s_ = 0.0;
-        }
+        update_lock_debounce(inputs);
         if (lock_debounce_s_ >= params_.lock_debounce_s) {
           enter(Mode::LOCK);
         } else if (time_in_mode_s_ >= params_.handoff_timeout_s) {
@@ -68,7 +63,16 @@ public:
         }
         break;
       case Mode::COAST:
+        time_in_mode_s_ += inputs.dt;
+        update_lock_debounce(inputs);
+        if (lock_debounce_s_ >= params_.lock_debounce_s) {
+          enter(Mode::LOCK);
+        } else if (time_in_mode_s_ >= params_.coast_timeout_s) {
+          enter(Mode::ACQUIRE);
+        }
+        break;
       case Mode::SAFE:
+      // do nothing. only way out is for the host to command it.
       default:
         break;
     }
@@ -90,7 +94,14 @@ public:
   }
 
 private:
-  // All per-mode clocks restart on every transition.
+  void update_lock_debounce(const ModeInputs & inputs) {
+    if (inputs.spot_valid && inputs.error < params_.lock_error_threshold) {
+      lock_debounce_s_ += inputs.dt;
+    } else {
+      lock_debounce_s_ = 0.0;
+    }
+  }
+
   void enter(Mode mode) {
     mode_ = mode;
     lock_debounce_s_ = 0.0;
