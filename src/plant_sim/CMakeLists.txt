@@ -15,6 +15,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_actuator test/test_actuator.cpp)
   target_include_directories(test_actuator PRIVATE include)
+  ament_add_gtest(test_disturbance test/test_disturbance.cpp)
+  target_include_directories(test_disturbance PRIVATE include)
 endif()
 
 ament_package()

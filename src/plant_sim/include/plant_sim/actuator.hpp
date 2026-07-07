@@ -22,6 +22,8 @@ public:
 
   /**
    * @brief Advance the model by one time step. Rate and range limits are applied.
+   * @param command the commanded position in rad
+   * @param dt the time step in s
    * @return the actual position after the step in rad
    */
   double step(double command, double dt) {

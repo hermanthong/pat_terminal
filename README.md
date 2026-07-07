@@ -283,7 +283,7 @@ A single node owns the ground truth: the true pointing error per axis.
 - Blockage is scripted from the demo launch to drive the LOCK → COAST → re-lock story
 
 > [!NOTE]
-> disturbance is a slow bias drift plus a few fixed sinusoids due to platform vibration
+> disturbance is a slow bias drift plus 2 fixed sinusoids due to platform vibration
 
 > [!NOTE]
 > **Assumption**: all angles are small and the axes are decoupled, so the contributions add linearly and each axis is simulated independently.
