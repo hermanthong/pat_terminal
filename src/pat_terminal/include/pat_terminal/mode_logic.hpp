@@ -33,8 +33,15 @@ public:
   explicit ModeLogic(const ModeParams & params)
   : params_(params) {}
 
+  /**
+   * @return the current mode
+   */
   Mode mode() const {return mode_;}
 
+  /**
+   * @brief Advance the state machine by one supervision cycle
+   * @return the mode after the tick
+   */
   Mode tick(const ModeInputs & inputs) {
     switch (mode_) {
       case Mode::ACQUIRE:
@@ -80,9 +87,9 @@ public:
   }
 
   /**
-  * @brief Interface for the host to set mode
-  * @returns true if legal, false if illegal
-  */
+   * @brief Interface for the host to set mode
+   * @return true if legal, false if illegal
+   */
   bool request(Mode target) {
     const bool legal = target == Mode::SAFE ||
       (mode_ == Mode::IDLE && target == Mode::ACQUIRE) ||
@@ -94,6 +101,9 @@ public:
   }
 
 private:
+  /**
+   * @brief Accumulate time below the lock threshold, any bad tick restarts it
+   */
   void update_lock_debounce(const ModeInputs & inputs) {
     if (inputs.spot_valid && inputs.error < params_.lock_error_threshold) {
       lock_debounce_s_ += inputs.dt;
@@ -102,6 +112,9 @@ private:
     }
   }
 
+  /**
+   * @brief Transition to a mode, restarting all per-mode clocks
+   */
   void enter(Mode mode) {
     mode_ = mode;
     lock_debounce_s_ = 0.0;

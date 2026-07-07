@@ -9,12 +9,19 @@ public:
   explicit Estimator(double alpha)
   : alpha_(alpha) {}
 
-  // For IMU data
+  /**
+  * @brief Update estimator with IMU data: theta += rate * dt
+  */
   void propagate(double rate, double dt) {theta_ += rate * dt;}
 
-  // For camera data 
+  /**
+  * @brief Update estimator with camera data: theta = alpha * theta + (1 - alpha) * measurement
+  */
   void correct(double measurement) {theta_ = alpha_ * theta_ + (1.0 - alpha_) * measurement;}
 
+  /**
+  * @return [rad] the current estimate of the pointing error
+  */
   double estimate() const {return theta_;}
 
 private:
