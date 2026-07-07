@@ -8,6 +8,7 @@
 #include "pat_interfaces/msg/axis_command.hpp"
 #include "pat_interfaces/msg/axis_state.hpp"
 #include "pat_interfaces/msg/position_error.hpp"
+#include "pat_interfaces/srv/set_bearing.hpp"
 #include "plant_sim/actuator.hpp"
 #include "plant_sim/disturbance.hpp"
 
@@ -15,6 +16,7 @@ using namespace std::chrono_literals;
 using pat_interfaces::msg::AxisCommand;
 using pat_interfaces::msg::AxisState;
 using pat_interfaces::msg::PositionError;
+using pat_interfaces::srv::SetBearing;
 using plant_sim::Actuator;
 using plant_sim::ActuatorParams;
 using plant_sim::Disturbance;
@@ -62,7 +64,6 @@ public:
 
     camera_latency_s_ = declare_parameter("camera_latency_s", 0.030);
     camera_noise_sigma_ = declare_parameter("camera_noise_sigma", 5e-6);
-    camera_fov_ = declare_parameter("camera_fov", 5e-3);
     imu_noise_sigma_ = declare_parameter("imu_noise_sigma", 5e-6);
     imu_bias_ = declare_parameter("imu_bias", 2e-6);
     rng_.seed(declare_parameter("seed", 42));
@@ -78,6 +79,15 @@ public:
       "gimbal_cmd", 10, [this](const AxisCommand & msg) {gimbal_cmd_ = msg;});
     blockage_sub_ = create_subscription<std_msgs::msg::Bool>(
       "blockage", 10, [this](const std_msgs::msg::Bool & msg) {blocked_ = msg.data;});
+
+    set_bearing_service_ = create_service<SetBearing>(
+      "set_bearing", [this](const SetBearing::Request::SharedPtr request,
+        SetBearing::Response::SharedPtr) {
+        azimuth_.bearing_offset = request->azimuth;
+        elevation_.bearing_offset = request->elevation;
+        RCLCPP_INFO(
+          get_logger(), "bearing set to %.6f, %.6f rad", request->azimuth, request->elevation);
+      });
 
     tick_timer_ = create_wall_timer(1ms, [this] {tick();});
     camera_timer_ = create_wall_timer(16667us, [this] {publish_camera();}); // 60fps
@@ -147,8 +157,7 @@ private:
 
   /**
    * @brief The camera reports the truth as of one latency ago plus centroid
-   * noise, stamped with the exposure time. Invalid when the spot is outside
-   * the FOV or a blockage is scripted.
+   * noise, stamped with the exposure time.
    */
   void publish_camera() {
     if (error_history_.empty()) {
@@ -159,8 +168,7 @@ private:
     msg.header.stamp = now() - rclcpp::Duration::from_seconds(camera_latency_s_);
     msg.error_azimuth = exposure[0] + gaussian(camera_noise_sigma_);
     msg.error_elevation = exposure[1] + gaussian(camera_noise_sigma_);
-    msg.valid = !blocked_ &&
-      std::abs(exposure[0]) < camera_fov_ && std::abs(exposure[1]) < camera_fov_;
+    msg.valid = !blocked_;
     position_error_pub_->publish(msg);
   }
 
@@ -178,7 +186,6 @@ private:
 
   double camera_latency_s_{};
   double camera_noise_sigma_{};
-  double camera_fov_{};
   double imu_noise_sigma_{};
   double imu_bias_{};
   std::mt19937 rng_;
@@ -190,6 +197,7 @@ private:
   rclcpp::Subscription<AxisCommand>::SharedPtr fsm_cmd_sub_;
   rclcpp::Subscription<AxisCommand>::SharedPtr gimbal_cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr blockage_sub_;
+  rclcpp::Service<SetBearing>::SharedPtr set_bearing_service_;
   rclcpp::TimerBase::SharedPtr tick_timer_;
   rclcpp::TimerBase::SharedPtr camera_timer_;
 };

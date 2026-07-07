@@ -12,6 +12,7 @@ ModeParams params() {
   return ModeParams{
     .lock_error_threshold = 50e-6,
     .lock_debounce_s = 0.200,
+    .handoff_error_threshold = 0.5e-3,
     .handoff_timeout_s = 2.0,
     .coast_entry_s = 0.100,
     .coast_timeout_s = 0.500,
@@ -34,11 +35,15 @@ TEST(ModeLogic, HostCanAlwaysCommandSafe) {
   EXPECT_EQ(logic.mode(), Mode::SAFE);
 }
 
-TEST(ModeLogic, AcquireEntersHandoffOnValidSpot) {
+TEST(ModeLogic, AcquireEntersHandoffConditions) {
   ModeLogic logic(params());
   logic.request(Mode::ACQUIRE);
   logic.tick({.dt = 1.0 / 60.0, .spot_valid = false, .error = 0.0});
-  EXPECT_EQ(logic.mode(), Mode::ACQUIRE); 
+  EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
+
+  // error is too high for FSM
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 3e-3});
+  EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
 
   logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
   EXPECT_EQ(logic.mode(), Mode::HANDOFF);

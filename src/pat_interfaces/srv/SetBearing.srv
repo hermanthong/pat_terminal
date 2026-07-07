@@ -1,0 +1,4 @@
+# Sim only: move the counterpart's true bearing at runtime.
+float64 azimuth    # [rad]
+float64 elevation  # [rad]
+---

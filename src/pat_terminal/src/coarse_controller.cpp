@@ -2,12 +2,14 @@
 #include "pat_interfaces/msg/axis_command.hpp"
 #include "pat_interfaces/msg/axis_state.hpp"
 #include "pat_interfaces/msg/mode_state.hpp"
+#include "pat_interfaces/msg/position_error.hpp"
 #include "pat_terminal/low_pass.hpp"
 
 using namespace std::chrono_literals;
 using pat_interfaces::msg::AxisCommand;
 using pat_interfaces::msg::AxisState;
 using pat_interfaces::msg::ModeState;
+using pat_interfaces::msg::PositionError;
 using pat_terminal::LowPass;
 
 /**
@@ -15,23 +17,36 @@ using pat_terminal::LowPass;
  */
 struct CoarseAxis {
   LowPass offload;
-  double bearing;              // [rad] commanded bearing
   double command{0.0};         // [rad] current gimbal command
   double fsm_deflection{0.0};  // [rad] latest FSM state, the offload input
 };
 
 /**
- * @brief The 100 Hz coarse loop: slews the gimbal to the commanded bearing in
- * ACQUIRE and offloads the FSM's average deflection in LOCK. Holds otherwise
+ * @brief The 100 Hz coarse loop: in ACQUIRE the gimbal steers to center the
+ * spot using the camera error, in LOCK it offloads the FSM's average
+ * deflection. Holds otherwise
  */
 class CoarseController : public rclcpp::Node {
 public:
   CoarseController()
   : Node("coarse_controller"),
     offload_tau_(declare_parameter("offload_tau", 1.0)),
-    azimuth_{LowPass(offload_tau_), declare_parameter("bearing_azimuth", 0.1)},
-    elevation_{LowPass(offload_tau_), declare_parameter("bearing_elevation", 0.05)} {
+    acquire_gain_(declare_parameter("acquire_gain", 0.3)),
+    azimuth_{LowPass(offload_tau_)},
+    elevation_{LowPass(offload_tau_)} {
     gimbal_cmd_pub_ = create_publisher<AxisCommand>("gimbal_cmd", 10);
+
+    // the camera error steers the gimbal toward the spot until LOCK, where
+    // the offload takes over as the gimbal's steering source
+    position_error_sub_ = create_subscription<PositionError>(
+      "position_error", 10, [this](const PositionError & msg) {
+        const bool steering = mode_ == ModeState::ACQUIRE || mode_ == ModeState::HANDOFF;
+        if (!steering || !msg.valid) {
+          return;
+        }
+        azimuth_.command += acquire_gain_ * msg.error_azimuth;
+        elevation_.command += acquire_gain_ * msg.error_elevation;
+      });
 
     fsm_state_sub_ = create_subscription<AxisState>(
       "fsm_state", 10, [this](const AxisState & msg) {
@@ -60,10 +75,7 @@ private:
       return;
     }
     mode_ = msg.mode;
-    if (mode_ == ModeState::ACQUIRE) {
-      azimuth_.command = azimuth_.bearing;
-      elevation_.command = elevation_.bearing;
-    } else if (mode_ == ModeState::LOCK) {
+    if (mode_ == ModeState::LOCK) {
       azimuth_.offload.reset(azimuth_.command);
       elevation_.offload.reset(elevation_.command);
     }
@@ -96,12 +108,14 @@ private:
   }
 
   double offload_tau_;
+  double acquire_gain_;
   CoarseAxis azimuth_;
   CoarseAxis elevation_;
   uint8_t mode_{ModeState::IDLE};
   rclcpp::Time last_update_time_;
 
   rclcpp::Publisher<AxisCommand>::SharedPtr gimbal_cmd_pub_;
+  rclcpp::Subscription<PositionError>::SharedPtr position_error_sub_;
   rclcpp::Subscription<AxisState>::SharedPtr fsm_state_sub_;
   rclcpp::Subscription<ModeState>::SharedPtr mode_sub_;
   rclcpp::TimerBase::SharedPtr update_timer_;

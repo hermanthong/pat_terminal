@@ -21,6 +21,7 @@ public:
     logic_(ModeParams{
         .lock_error_threshold = declare_parameter("lock_error_threshold", 50e-6),
         .lock_debounce_s = declare_parameter("lock_debounce_s", 0.200),
+        .handoff_error_threshold = declare_parameter("handoff_error_threshold", 0.5e-3),
         .handoff_timeout_s = declare_parameter("handoff_timeout_s", 2.0),
         .coast_entry_s = declare_parameter("coast_entry_s", 0.100),
         .coast_timeout_s = declare_parameter("coast_timeout_s", 0.500),

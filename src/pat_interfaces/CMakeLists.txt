@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/AxisState.msg"
   "msg/AxisCommand.msg"
   "srv/SetMode.srv"
+  "srv/SetBearing.srv"
   DEPENDENCIES std_msgs
 )
 

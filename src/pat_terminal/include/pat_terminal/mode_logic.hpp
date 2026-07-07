@@ -29,9 +29,10 @@ constexpr const char * mode_name(Mode mode) {
 }
 
 struct ModeParams {
-  double lock_error_threshold;  // [rad] HANDOFF/COAST -> LOCK error criterion
-  double lock_debounce_s;       // error must stay below threshold this long
-  double handoff_timeout_s;     // HANDOFF -> ACQUIRE abort
+  double lock_error_threshold;      // [rad] HANDOFF/COAST -> LOCK error criterion
+  double lock_debounce_s;           // error must stay below threshold this long
+  double handoff_error_threshold;   // [rad] ACQUIRE -> HANDOFF requires error within FSM authority
+  double handoff_timeout_s;         // HANDOFF -> ACQUIRE abort
   double coast_entry_s;         // LOCK -> COAST after this long without a valid spot
   double coast_timeout_s;       // COAST -> ACQUIRE fallback
 };
@@ -60,7 +61,7 @@ public:
   Mode tick(const ModeInputs & inputs) {
     switch (mode_) {
       case Mode::ACQUIRE:
-        if (inputs.spot_valid) {
+        if (inputs.spot_valid && inputs.error < params_.handoff_error_threshold) {
           enter(Mode::HANDOFF);
         }
         break;

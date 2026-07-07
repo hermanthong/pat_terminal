@@ -46,6 +46,7 @@ flowchart LR
     HOST[host_link<br/>mothership bridge]
 
     CAM -- "/position_error" --> FINE
+    CAM -- "/position_error" --> COARSE
     IMU -- "/imu_data" --> FINE
     FINE -- "/fsm_cmd" --> ACT1[(FSM)]
     FINE -- "/fsm_state" --> COARSE
@@ -112,16 +113,16 @@ flowchart LR
 
 #### coarse_controller
 - Owns the gimbal
-- Slews to the commanded bearing
-- Offload
+- In ACQUIRE and HANDOFF, steers the gimbal to center the spot using the camera position error
+- In LOCK, offloads the FSM's average deflection instead (τ ≈ 1 s low-pass), so the FSM re-centers
   
 #### mode_manager
   - Owns the state machine and is the single writer of `mode`
   - Exposes `set_mode` for the host to command
   - Modes:
     - **IDLE**: powered and healthy, doing nothing. FSM centered, gimbal halted
-    - **ACQUIRE**: coarse control only owns position error. gimbal slews to the commanded bearing and holds, waiting for a valid spot
-    - **HANDOFF**: fine loop closes on the spot while the gimbal holds. Exits to LOCK on debounced low error, aborts back to ACQUIRE on timeout
+    - **ACQUIRE**: coarse control only owns position error. gimbal steers to center the spot using the camera, until the error is within the FSM's authority
+    - **HANDOFF**: fine loop closes on the spot while the gimbal keeps centering it. Exits to LOCK on debounced low error, aborts back to ACQUIRE on timeout
     - **LOCK**: fine control only owns position error.
     - **COAST**: camera can't find the spot. Use IMU to keep still, then re-enter LOCK or fall back to ACQUIRE
     - **SAFE**: FSM centered, gimbal halted, waiting for the host. reachable from every state
@@ -130,7 +131,7 @@ flowchart LR
 stateDiagram-v2
     [*] --> IDLE
     IDLE --> ACQUIRE : set_mode
-    ACQUIRE --> HANDOFF : valid spot
+    ACQUIRE --> HANDOFF : valid spot, err < 0.5 mrad
     HANDOFF --> LOCK : err < 50 µrad for 200 ms
     HANDOFF --> ACQUIRE : 2000 ms timeout
     LOCK --> COAST : no valid spot 100 ms
@@ -171,12 +172,15 @@ Two loops share one job:
 > [!NOTE]
 > **Assumption**: The counterpart's beacon is always on. There's no atmospheric model, and all disturbance is platform-side: vibration plus slow relative drift.
 
-**Acquisition.** The gimbal slews to the commanded bearing (from orbit knowledge / host) and holds. On a valid spot, mode_manager commands HANDOFF.
+**Acquisition.** The gimbal steers to center the spot using the camera's position error. There is no external bearing input: the camera is the only source of target direction, and the detector center is the target by optical construction. mode_manager commands HANDOFF once the spot is valid and the error is within the FSM's authority (< 0.5 mrad, half the FSM range).
 
 > [!NOTE]
-> **Assumption**: Bearing knowledge from the host is accurate to within the camera field of view, so the spot always lands on the detector without the need of a search scan.
+> **Assumption**: The camera field of view is infinite, so the spot is always on the detector and the camera always has a direction to steer by. A real detector edge would create a blind regime where the terminal has no information to steer by, needing a search scan.
 
-**Handoff.** The fine loop closes on the estimated error while the gimbal holds position. HANDOFF exits to LOCK when the error stays below 50 µrad for 200 ms. If that isn't met within 2000 ms, HANDOFF aborts back to ACQUIRE. Handoff is a real state with entry, exit, and abort criteria because the transient where the FSM first grabs the beam is where the failures live.
+**Handoff.** The fine loop closes on the estimated error while the gimbal keeps centering the spot at its own slow bandwidth. HANDOFF exits to LOCK when the error stays below 50 µrad for 200 ms. If that isn't met within 2000 ms, HANDOFF aborts back to ACQUIRE. Handoff is a real state with entry, exit, and abort criteria because the transient where the FSM first grabs the beam is where the failures live.
+
+> [!NOTE]
+> The handoff entry threshold exists because a visible spot is not yet a reachable spot: the camera sees far beyond the ±1 mrad the FSM can reach. Handing off earlier saturates the FSM and strands the residual error where neither loop is finishing the job.
 
 **Lock and offload.** In LOCK the FSM owns the position error entirely. The gimbal ignores the camera and tracks a low-passed version (τ ≈ 1 s) of the FSM's deflection: it steers toward wherever the FSM is straining, and the FSM re-centers itself. Saturation is managed continuously instead of as an event.
 
@@ -188,7 +192,7 @@ When the camera stops reporting a valid spot, the response is tiered:
 
 1. **COAST**: hold on IMU dead-reckoning for up to 500 ms. Brief dropouts usually self-heal, and re-acquiring over a one-frame gap would cost seconds of link.
 2. If the spot returns, re-enter LOCK through the same debounce as HANDOFF.
-3. Otherwise fall back to ACQUIRE. Re-slew to the last known bearing.
+3. Otherwise fall back to ACQUIRE. The gimbal already points at the last known spot location and waits for the spot to reappear.
 
 ### A.4 Timing and latency budget
 
@@ -277,7 +281,7 @@ A single node owns the ground truth: the true pointing error per axis.
 - Both actuators share one model: a first-order lag toward the command, a slew-rate limit, and a range clamp
   - The gimbal is the slow one: τ ≈ 32 ms (from the 5 Hz closed-loop bandwidth), 20°/s rate limit, wide range
   - The FSM is the fast one: ~1 kHz-class τ, ±1 mrad range
-- The camera samples the truth at 60 Hz, adds centroid noise, and stamps the message 30 ms in the past. The valid flag goes false when the spot leaves the FOV or when a blockage is scripted
+- The camera samples the truth at 60 Hz, adds centroid noise, and stamps the message 30 ms in the past. The FOV is infinite, so the valid flag goes false only when a blockage is scripted
 - The IMU publishes the true platform rate plus a slow bias at 1 kHz
 - Blockage is scripted from the demo launch to drive the LOCK → COAST → re-lock story
 
@@ -297,7 +301,7 @@ A single node owns the ground truth: the true pointing error per axis.
 1. Record data and model the real gimbal and FSM, then re-tune both loop parameters and the handoff thresholds against measured dynamics. I expect there to be some resonance and static friction with the real actuators, but that should be collected before being modelled in software. 
 1. I assumed that the vibration noised are sinusoids. To make the simulation more accurate, the real vibration spectra should be measured so it can be modelled more accurately.
 1. The code should be tested on real hardware. CPU and memory bottlenecks may be different on the actual PAT terminal computer, and these should be profiled.
-1. I assumed that the camera never exceeds the field of view of the camera. If this assumption is false, a new mode needs to be added where the gimbal searches for the spot.
+1. I assumed the camera field of view is infinite. A real detector has an edge, and losing the spot past it leaves the terminal blind. That needs a search scan mode where the gimbal sweeps until the spot reappears, plus FOV-edge validity handling in camera_node.
 1. Adding more IMU glitches to the test suite.
 
 ### Run instructions

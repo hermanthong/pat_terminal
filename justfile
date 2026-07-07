@@ -66,3 +66,7 @@ set_mode mode:
 # script the demo blockage: just blockage true / just blockage false
 blockage state:
     ros2 topic pub --once /blockage std_msgs/msg/Bool "{data: {{state}}}"
+
+# move the counterpart's true bearing, eg. `just set_bearing 0.1 0.05`
+set_bearing azimuth elevation:
+    ros2 service call /set_bearing pat_interfaces/srv/SetBearing "{azimuth: {{azimuth}}, elevation: {{elevation}}}"
