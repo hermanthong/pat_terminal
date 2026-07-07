@@ -13,6 +13,7 @@ find_package(std_msgs REQUIRED)
 find_package(pat_interfaces REQUIRED)
 
 add_executable(mode_manager src/mode_manager.cpp)
+target_include_directories(mode_manager PRIVATE include)
 ament_target_dependencies(mode_manager rclcpp std_msgs pat_interfaces)
 
 install(TARGETS
