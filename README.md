@@ -94,6 +94,15 @@ flowchart LR
 > [!NOTE]
 > **Alternative considered**: a latency-compensated estimator could be implemented instead by buffering IMU history and applying each camera correction at its measurement time. It is not needed at these numbers. With a small camera weight (1−α ≈ 0.05 per frame at 60 fps) the camera branch only has authority below f_c ≈ (1−α)·60/2π ≈ 0.5 Hz. Everything faster is corrected by the IMU at < 1 ms latency. Applying a 0.5 Hz signal 30 ms late gives a phase error of 2π·0.5·0.03 ≈ 0.1 rad, so the correction mis-aims by ~10% of the sub-Hz residual (~10 µrad in LOCK). I assume this is acceptable in this context.
 
+- PI control law that turns the estimated error into the FSM deflection command, per axis
+  - The command is clamped to the FSM range (±1 mrad), and the integrator is clamped while the output saturates (anti-windup), so a long saturation episode does not overshoot on recovery
+
+> [!NOTE]
+> **Alternative considered**: full PID control law. The derivative term is dropped because I assume that the vibrations will cause a high amount of noise measured by the IMU.
+
+> [!NOTE]
+> **Alternative considered**: P-only control law. Simpler, but I expect constant disturbance (bias wind, platform tilt, IMU drift). Thus, there will still be significant error in a steady-state. The integrator accumulates until it cancels the bias, which is what holds the spot centered.
+
 #### coarse_controller
 - Owns the gimbal
 - Slews to the commanded bearing
@@ -258,4 +267,5 @@ In order to build these, the following packages are required:
 
 ---
 
-## Part D: Design Considerations
+### Part D: Next steps with more time or real hardware
+1. Record data and model the real gimbal and FSM, then re-tune both loop parameters and the handoff thresholds against measured dynamics.
