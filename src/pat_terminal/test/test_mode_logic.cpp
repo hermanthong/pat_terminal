@@ -138,6 +138,32 @@ TEST(ModeLogic, LockCoastsOnlyAfterContinuousSpotLoss) {
   EXPECT_EQ(logic.mode(), Mode::COAST);
 }
 
+TEST(ModeLogic, LockFallsBackToAcquireOnDivergedError) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
+  // t > 200 ms of low error, debounce complete
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.025, .spot_valid = true, .error = 20e-6});
+  }
+  ASSERT_EQ(logic.mode(), Mode::LOCK);
+
+  // a brief spike should not break the lock
+  logic.tick({.dt = 0.020, .spot_valid = true, .error = 3e-3});
+  EXPECT_EQ(logic.mode(), Mode::LOCK);
+  logic.tick({.dt = 0.020, .spot_valid = true, .error = 20e-6});
+  EXPECT_EQ(logic.mode(), Mode::LOCK);
+
+  // t = 180 ms
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = true, .error = 3e-3});
+    EXPECT_EQ(logic.mode(), Mode::LOCK);
+  }
+  // t > 200 ms, lock should break
+  logic.tick({.dt = 0.025, .spot_valid = true, .error = 3e-3});
+  EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
+}
+
 TEST(ModeLogic, CoastRelocksOnDebouncedSpotReturn) {
   ModeLogic logic(params());
   logic.request(Mode::ACQUIRE);

@@ -78,11 +78,19 @@ public:
         // Continuous time without a valid spot, any valid frame restarts it.
         if (inputs.spot_valid) {
           spot_loss_s_ = 0.0;
+          // If the spot is too far away, lose the lock.
+          if (inputs.error > params_.handoff_error_threshold) {
+            diverged_s_ += inputs.dt;
+          } else {
+            diverged_s_ = 0.0;
+          }
         } else {
           spot_loss_s_ += inputs.dt;
         }
         if (spot_loss_s_ >= params_.coast_entry_s) {
           enter(Mode::COAST);
+        } else if (diverged_s_ >= params_.lock_debounce_s) {
+          enter(Mode::ACQUIRE);
         }
         break;
       case Mode::COAST:
@@ -136,6 +144,7 @@ private:
     lock_debounce_s_ = 0.0;
     time_in_mode_s_ = 0.0;
     spot_loss_s_ = 0.0;
+    diverged_s_ = 0.0;
   }
 
   ModeParams params_;
@@ -143,6 +152,7 @@ private:
   double lock_debounce_s_{0.0};
   double time_in_mode_s_{0.0};
   double spot_loss_s_{0.0};
+  double diverged_s_{0.0};
 };
 
 }  // namespace pat_terminal

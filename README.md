@@ -123,7 +123,7 @@ flowchart LR
     - **IDLE**: powered and healthy, doing nothing. FSM centered, gimbal halted
     - **ACQUIRE**: coarse control only owns position error. gimbal steers to center the spot using the camera, until the error is within the FSM's authority
     - **HANDOFF**: fine loop closes on the spot while the gimbal keeps centering it. Exits to LOCK on debounced low error, aborts back to ACQUIRE on timeout
-    - **LOCK**: fine control only owns position error.
+    - **LOCK**: fine control only owns position error. Falls back to ACQUIRE if the error sustains beyond the FSM's authority, since only camera-steered acquisition can recover that quickly
     - **COAST**: camera can't find the spot. Use IMU to keep still, then re-enter LOCK or fall back to ACQUIRE
     - **SAFE**: FSM centered, gimbal halted, waiting for the host. reachable from every state
 
@@ -135,6 +135,7 @@ stateDiagram-v2
     HANDOFF --> LOCK : err < 50 µrad for 200 ms
     HANDOFF --> ACQUIRE : 2000 ms timeout
     LOCK --> COAST : no valid spot 100 ms
+    LOCK --> ACQUIRE : err > 0.5 mrad for 200 ms
     COAST --> LOCK : spot returns (debounced)
     COAST --> ACQUIRE : 500 ms timeout
     IDLE --> SAFE
@@ -193,6 +194,8 @@ When the camera stops reporting a valid spot, the response is tiered:
 1. **COAST**: hold on IMU dead-reckoning for up to 500 ms. Brief dropouts usually self-heal, and re-acquiring over a one-frame gap would cost seconds of link.
 2. If the spot returns, re-enter LOCK through the same debounce as HANDOFF.
 3. Otherwise fall back to ACQUIRE. The gimbal already points at the last known spot location and waits for the spot to reappear.
+
+A lock can also be lost with the spot still visible: if the error sustains beyond the FSM's authority (> 0.5 mrad for 200 ms), LOCK falls back to ACQUIRE directly. In LOCK the gimbal only moves at the offload's gentle pace, so a large jump of the counterpart would otherwise take tens of seconds to walk down. Camera-steered ACQUIRE recovers it in well under a second.
 
 ### A.4 Timing and latency budget
 
