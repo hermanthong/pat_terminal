@@ -25,6 +25,7 @@ public:
         .coast_entry_s = declare_parameter("coast_entry_s", 0.100),
         .coast_timeout_s = declare_parameter("coast_timeout_s", 0.500),
       }) {
+      current_mode_ = logic_.mode();
     // transient_local so a late joiner or a respawned node can learn the mode
     mode_pub_ = create_publisher<ModeState>("mode", rclcpp::QoS(1).reliable().transient_local());
 
@@ -61,6 +62,11 @@ private:
       .error = std::hypot(latest_error_.error_azimuth, latest_error_.error_elevation),
     });
     fresh_frame_ = false;
+    
+    if (logic_.mode() != current_mode_) {
+      RCLCPP_INFO(get_logger(), "mode: %s", pat_terminal::mode_name(logic_.mode()));
+      current_mode_ = logic_.mode();
+    }
     publish_mode();
   }
 
@@ -72,6 +78,7 @@ private:
   }
 
   ModeLogic logic_;
+  Mode current_mode_;
   PositionError latest_error_;
   bool fresh_frame_{false};
   rclcpp::Time last_tick_time_;

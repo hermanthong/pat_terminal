@@ -60,15 +60,18 @@ private:
       return;
     }
     mode_ = msg.mode;
-    if (mode_ == ModeState::LOCK) {
+    if (mode_ == ModeState::ACQUIRE) {
       azimuth_.command = azimuth_.bearing;
       elevation_.command = elevation_.bearing;
-    
+    } else if (mode_ == ModeState::LOCK) {
+      azimuth_.offload.reset(azimuth_.command);
+      elevation_.offload.reset(elevation_.command);
+    }
   }
 
   /**
-   * @brief One 100 Hz cycle: in LOCK the gimbal steers toward wherever the
-   * FSM is straining, so the FSM re-centers. fsm -> 0 is the equilibrium
+   * @brief One 100 Hz cycle. Updates both axes' offload filters and command the gimbal
+   * @note In LOCK, the gimbal steers to offload the FSM
    */
   void update() {
     const auto update_time = now();

@@ -250,16 +250,15 @@ DDS discovery means nodes can start in any order and links form whenever both en
 Ranked hardest first:
 
 1. **The coarse/fine handoff and its failure modes.** System integration is always hard.
-2. **Fusing a delayed, slow measurement with a fast sensor.** The camera's 30 ms latency against a 1 kHz loop.
-3. **Holding hard real-time in ROS 2.** Executor isolation, QoS discipline, RT kernel configuration. This requires careful programming and identifying chokepoints.
+1. **Fusing a delayed, slow measurement with a fast sensor.** The camera's 30 ms latency against a 1 kHz loop.
+1. **Holding hard real-time in ROS 2.** Executor isolation, QoS discipline, RT kernel configuration. This requires careful programming and identifying chokepoints.
 
 > [!NOTE]
 > Items 2 and 3 are hard, but at the end of the day, they are one component with one job and clear success criteria. On top of that, there are known solutions for them, it just requires tuning.
 > 
-> The handoff is hard because it is an interaction between systems. The two controllers have opposite dynamics, a state machine, and imperfect sensing. Every part can be individually correct but the system still fails because of emergent properties. The failure modes are interaction failures. For example, the FSM could slamming into its range limit because the gimbal hadn't settled, offload and re-acquisition could fight over the gimbal, or a stale mode message could leave two controllers each believing they own the beam. It is impossible to write unit tests for these parts.
+> The handoff is hard because it is an interaction between systems. The two controllers have opposite dynamics, a state machine, and imperfect sensing. Every part can be individually correct but the system still fails because of emergent properties. The failure modes are interaction failures. For example, the FSM could slamming into its range limit because the gimbal hadn't settled, offload and re-acquisition could fight over the gimbal, or a stale mode message could leave two controllers each believing they own the beam.
 
-In order to build these, the following packages are required:
-1. pat_interfaces: definition of messages and services
+In order to build these, the following nodes are required:
 1. plant_sim: simulation of sensors and actuators. not an actual part of the PAT terminal.
 1. fine_controller: 1 kHz loop
 1. coarse_controller: 60 Hz loop
@@ -300,3 +299,9 @@ A single node owns the ground truth: the true pointing error per axis.
 1. The code should be tested on real hardware. CPU and memory bottlenecks may be different on the actual PAT terminal computer, and these should be profiled.
 1. I assumed that the camera never exceeds the field of view of the camera. If this assumption is false, a new mode needs to be added where the gimbal searches for the spot.
 1. Adding more IMU glitches to the test suite.
+
+### Run instructions
+1. run the docker: `just run_docker`
+1. run the simulation: `just launch`
+1. attach to the docker in another terminal: `just attach`
+1. command PAT to ACQUIRE: `just set_mode 1`

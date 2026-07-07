@@ -39,6 +39,10 @@ run_node node:
 run_sim:
     ros2 run plant_sim plant_sim_node
 
+# the full demo: sim + all four terminal nodes
+launch:
+    ros2 launch plant_sim simulation_launch.py
+
 test:
     colcon test && colcon test-result --verbose
 
@@ -49,5 +53,16 @@ auto_test:
     done
 
 # simulate host commands
+# IDLE = 0,
+# ACQUIRE = 1,
+# HANDOFF = 2,
+# LOCK = 3,
+# COAST = 4,
+# SAFE = 5,
+
 set_mode mode:
     ros2 service call /set_mode pat_interfaces/srv/SetMode "{mode: {{mode}}}"
+
+# script the demo blockage: just blockage true / just blockage false
+blockage state:
+    ros2 topic pub --once /blockage std_msgs/msg/Bool "{data: {{state}}}"

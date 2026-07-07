@@ -100,7 +100,8 @@ private:
   }
 
   /**
-   * @brief One 1 kHz cycle: propagate both estimates and command the FSM
+   * @brief One 1 kHz cycle. Propagates both axes' estimates and command the FSM
+   * @note In HANDOFF, LOCK and COAST, the FSM is commanded to work against the estimated pointing error.
    */
   void update() {
     const auto update_time = now();

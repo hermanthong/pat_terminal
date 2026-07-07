@@ -13,6 +13,21 @@ enum class Mode : uint8_t {
   SAFE = 5,
 };
 
+/**
+ * @return the mode's name in english for logs
+ */
+constexpr const char * mode_name(Mode mode) {
+  switch (mode) {
+    case Mode::IDLE: return "IDLE";
+    case Mode::ACQUIRE: return "ACQUIRE";
+    case Mode::HANDOFF: return "HANDOFF";
+    case Mode::LOCK: return "LOCK";
+    case Mode::COAST: return "COAST";
+    case Mode::SAFE: return "SAFE";
+  }
+  return "UNKNOWN";
+}
+
 struct ModeParams {
   double lock_error_threshold;  // [rad] HANDOFF/COAST -> LOCK error criterion
   double lock_debounce_s;       // error must stay below threshold this long
