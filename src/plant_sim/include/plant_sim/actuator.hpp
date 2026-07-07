@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 namespace plant_sim {
 
 struct ActuatorParams {
@@ -19,11 +21,15 @@ public:
   : params_(params) {}
 
   /**
-   * @brief Advance the model by one time step.
+   * @brief Advance the model by one time step. Rate and range limits are applied.
    * @return the actual position after the step in rad
    */
   double step(double command, double dt) {
-    return 0.0;
+    const double move = (dt / params_.tau) * (command - position_);
+    const double max_move = params_.rate_limit * dt;
+    position_ += std::clamp(move, -max_move, max_move);
+    position_ = std::clamp(position_, -params_.range_limit, params_.range_limit);
+    return position_;
   }
 
   /**
