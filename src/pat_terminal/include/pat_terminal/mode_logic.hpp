@@ -44,7 +44,7 @@ public:
         break;
       case Mode::HANDOFF:
         time_in_mode_s_ += inputs.dt;
-        // Time below the lock threshold accumulates; any bad tick restarts it.
+        // Time below the lock threshold accumulates, any bad tick restarts it.
         if (inputs.spot_valid && inputs.error < params_.lock_error_threshold) {
           lock_debounce_s_ += inputs.dt;
         } else {
@@ -56,6 +56,19 @@ public:
           enter(Mode::ACQUIRE);
         }
         break;
+      case Mode::LOCK:
+        // Continuous time without a valid spot, any valid frame restarts it.
+        if (inputs.spot_valid) {
+          spot_loss_s_ = 0.0;
+        } else {
+          spot_loss_s_ += inputs.dt;
+        }
+        if (spot_loss_s_ >= params_.coast_entry_s) {
+          enter(Mode::COAST);
+        }
+        break;
+      case Mode::COAST:
+      case Mode::SAFE:
       default:
         break;
     }
@@ -82,12 +95,14 @@ private:
     mode_ = mode;
     lock_debounce_s_ = 0.0;
     time_in_mode_s_ = 0.0;
+    spot_loss_s_ = 0.0;
   }
 
   ModeParams params_;
   Mode mode_{Mode::IDLE};
   double lock_debounce_s_{0.0};
   double time_in_mode_s_{0.0};
+  double spot_loss_s_{0.0};
 };
 
 }  // namespace pat_terminal

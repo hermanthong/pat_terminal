@@ -102,6 +102,37 @@ TEST(ModeLogic, HandoffAbortsToAcquireOnTimeout) {
   EXPECT_EQ(logic.mode(), Mode::ACQUIRE);
 }
 
+TEST(ModeLogic, LockCoastsOnlyAfterContinuousSpotLoss) {
+  ModeLogic logic(params());
+  logic.request(Mode::ACQUIRE);
+  logic.tick({.dt = 1.0 / 60.0, .spot_valid = true, .error = 300e-6});
+  // t > 200 ms of low error, debounce complete
+  for (int i = 0; i < 9; ++i) {
+    logic.tick({.dt = 0.025, .spot_valid = true, .error = 20e-6});
+  }
+  ASSERT_EQ(logic.mode(), Mode::LOCK);
+
+  // t < 100 ms 
+  for (int i = 0; i < 4; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = false, .error = 0.0});
+    EXPECT_EQ(logic.mode(), Mode::LOCK);
+  }
+
+  // t = 0, spot_loss_s_ is reset by a valid spot
+  logic.tick({.dt = 0.020, .spot_valid = true, .error = 20e-6});
+  EXPECT_EQ(logic.mode(), Mode::LOCK);
+
+  // t < 100 ms
+  for (int i = 0; i < 4; ++i) {
+    logic.tick({.dt = 0.020, .spot_valid = false, .error = 0.0});
+    EXPECT_EQ(logic.mode(), Mode::LOCK);
+  }
+
+  // t > 100 ms
+  logic.tick({.dt = 0.025, .spot_valid = false, .error = 0.0});
+  EXPECT_EQ(logic.mode(), Mode::COAST);
+}
+
 TEST(ModeLogic, SafeRecoversOnlyToIdle) {
   ModeLogic logic(params());
   logic.request(Mode::SAFE);
