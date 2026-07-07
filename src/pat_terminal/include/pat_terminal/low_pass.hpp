@@ -20,6 +20,12 @@ public:
   }
 
   /**
+   * @brief Seed the filter, for starting the offload from the current command
+   * @param initial the initial value to seed the filter with
+   */
+  void reset(double initial) {value_ = initial;}
+
+  /**
    * @return the current filtered value
    */
   double value() const {return value_;}

@@ -21,9 +21,14 @@ add_executable(fine_controller src/fine_controller.cpp)
 target_include_directories(fine_controller PRIVATE include)
 ament_target_dependencies(fine_controller rclcpp sensor_msgs pat_interfaces)
 
+add_executable(coarse_controller src/coarse_controller.cpp)
+target_include_directories(coarse_controller PRIVATE include)
+ament_target_dependencies(coarse_controller rclcpp pat_interfaces)
+
 install(TARGETS
   mode_manager
   fine_controller
+  coarse_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 

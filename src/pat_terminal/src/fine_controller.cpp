@@ -17,7 +17,7 @@ using pat_terminal::PIParams;
 /**
  * @brief One axis of the fine loop.
  */
-struct AxisControl {
+struct FineAxis {
   Estimator estimator;
   PIController pi;
   bool seeded{false};        // first valid frame after HANDOFF entry seeds the estimate
@@ -75,10 +75,6 @@ private:
     return mode_ == ModeState::HANDOFF || mode_ == ModeState::LOCK || mode_ == ModeState::COAST;
   }
 
-  /**
-   * @brief Entry actions: entering the fine-authority modes from outside
-   * starts a fresh estimate and a fresh integrator
-   */
   void mode_callback(const ModeState & msg) {
     const bool was_active = active();
     mode_ = msg.mode;
@@ -94,7 +90,7 @@ private:
    * @brief A valid camera frame: the first one after HANDOFF entry seeds the
    * estimate, later ones blend in at weight 1 - alpha
    */
-  void correct_axis(AxisControl & axis, double measurement) {
+  void correct_axis(FineAxis & axis, double measurement) {
     if (axis.seeded) {
       axis.estimator.correct(measurement);
     } else {
@@ -127,7 +123,7 @@ private:
   /**
    * @brief Propgate the estimator with IMU data
    */
-  void step_axis(AxisControl & axis, double dt) {
+  void step_axis(FineAxis & axis, double dt) {
     const double fsm_self_rate = (axis.command - axis.previous_command) / dt;
     axis.estimator.propagate(axis.imu_rate - fsm_self_rate, dt);
     axis.previous_command = axis.command;
@@ -136,8 +132,8 @@ private:
 
   double alpha_;
   PIParams pi_params_;
-  AxisControl azimuth_;
-  AxisControl elevation_;
+  FineAxis azimuth_;
+  FineAxis elevation_;
   uint8_t mode_{ModeState::IDLE};
   rclcpp::Time last_update_time_;
 

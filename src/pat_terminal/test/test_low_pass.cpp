@@ -12,6 +12,15 @@ TEST(LowPass, StepsTowardTheSample) {
   // result = 0.1 + 0.1 * (1 - 0.1) = 0.19
   EXPECT_NEAR(result2, 0.19, 1e-12);
 }
+TEST(LowPass, ResetSeedsTheValue) {
+  LowPass low_pass(1.0);
+  low_pass.update(1.0, 0.1);
+  low_pass.reset(0.5);
+  EXPECT_NEAR(low_pass.value(), 0.5, 1e-12);
+  double result = low_pass.update(1.0, 0.1);
+  // result = 0.5 + 0.1 * (1 - 0.5) = 0.55
+  EXPECT_NEAR(result, 0.55, 1e-12);
+}
 
 TEST(LowPass, ConvergesToConstantInput) {
   LowPass low_pass(1.0);
