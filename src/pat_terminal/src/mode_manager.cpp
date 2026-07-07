@@ -3,8 +3,7 @@
 
 using pat_interfaces::msg::ModeState;
 
-class ModeManager : public rclcpp::Node
-{
+class ModeManager : public rclcpp::Node {
 public:
   ModeManager()
   : Node("mode_manager")
@@ -14,8 +13,7 @@ public:
   }
 
 private:
-  void publish_mode()
-  {
+  void publish_mode() {
     ModeState msg;
     msg.header.stamp = now();
     msg.mode = ModeState::IDLE;
@@ -26,8 +24,7 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
-int main(int argc, char ** argv)
-{
+int main(int argc, char ** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<ModeManager>());
   rclcpp::shutdown();

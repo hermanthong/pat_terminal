@@ -5,11 +5,9 @@ using pat_terminal::Mode;
 using pat_terminal::ModeLogic;
 using pat_terminal::ModeParams;
 
-namespace
-{
+namespace {
 
-ModeParams params()
-{
+ModeParams params() {
   return ModeParams{
     .lock_error_threshold = 50e-6,
     .lock_debounce_s = 0.200,
@@ -21,8 +19,7 @@ ModeParams params()
 
 }  // namespace
 
-TEST(ModeLogic, StartsIdleAndAcceptsAcquireRequest)
-{
+TEST(ModeLogic, StartsIdleAndAcceptsAcquireRequest) {
   ModeLogic logic(params());
   EXPECT_EQ(logic.mode(), Mode::IDLE);
   EXPECT_TRUE(logic.request(Mode::ACQUIRE));

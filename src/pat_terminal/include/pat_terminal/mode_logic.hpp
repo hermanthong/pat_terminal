@@ -2,8 +2,7 @@
 
 #include <cstdint>
 
-namespace pat_terminal
-{
+namespace pat_terminal {
 
 enum class Mode : uint8_t {
   IDLE = 0,
@@ -14,8 +13,7 @@ enum class Mode : uint8_t {
   SAFE = 5,
 };
 
-struct ModeParams
-{
+struct ModeParams {
   double lock_error_threshold;  // [rad] HANDOFF/COAST -> LOCK error criterion
   double lock_debounce_s;       // error must stay below threshold this long
   double handoff_timeout_s;     // HANDOFF -> ACQUIRE abort
@@ -24,8 +22,7 @@ struct ModeParams
 };
 
 // Overall state machine for the PAT terminal 
-class ModeLogic
-{
+class ModeLogic {
 public:
   explicit ModeLogic(const ModeParams & params)
   : params_(params) {}
@@ -36,10 +33,12 @@ public:
   * @brief Interface for the host to set mode
   * @returns true if legal, false if illegal
   */
-  bool request(Mode target)
-  {
-    (void)target;
-    return false;
+  bool request(Mode target) {
+    const bool legal = mode_ == Mode::IDLE && target == Mode::ACQUIRE;
+    if (legal) {
+      mode_ = target;
+    }
+    return legal;
   }
 
 private:

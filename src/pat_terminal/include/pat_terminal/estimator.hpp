@@ -1,12 +1,10 @@
 #pragma once
 
-namespace pat_terminal
-{
+namespace pat_terminal {
 
 // Complementary filter for one axis of pointing error.
 // theta_k = alpha * (theta_{k-1} + omega_k * dt) + (1 - alpha) * a_k
-class Estimator
-{
+class Estimator {
 public:
   explicit Estimator(double alpha)
   : alpha_(alpha) {}
