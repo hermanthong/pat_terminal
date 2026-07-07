@@ -43,6 +43,16 @@ run_sim:
 launch:
     ros2 launch plant_sim simulation_launch.py
 
+integration_test:
+    launch_test src/plant_sim/test/test_integration.py
+
+plot:
+    python3 src/plant_sim/scripts/plot_run.py
+
+# host side: copy the figure out of the container into log/
+fetch_plot:
+    mkdir -p log && docker cp pat-dev:/ws/log/pat_demo_run.png log/
+
 test:
     colcon test && colcon test-result --verbose
 

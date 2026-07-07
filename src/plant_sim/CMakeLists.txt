@@ -28,6 +28,8 @@ install(DIRECTORY launch
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_integration.py TIMEOUT 90)
   ament_add_gtest(test_actuator test/test_actuator.cpp)
   target_include_directories(test_actuator PRIVATE include)
   ament_add_gtest(test_disturbance test/test_disturbance.cpp)

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
 #include "pat_interfaces/msg/axis_command.hpp"
@@ -35,6 +36,7 @@ public:
     offload_tau_(declare_parameter("offload_tau", 1.0)),
     acquire_gain_(declare_parameter("acquire_gain", 0.3)),
     acquire_step_limit_(declare_parameter("acquire_step_limit", 5e-3)),
+    steering_deadband_(declare_parameter("steering_deadband", 200e-6)),
     azimuth_{LowPass(offload_tau_)},
     elevation_{LowPass(offload_tau_)} {
     gimbal_cmd_pub_ = create_publisher<AxisCommand>("gimbal_cmd", 10);
@@ -67,11 +69,13 @@ public:
 
 private:
   /**
-   * @brief One steering increment, clamped so the command cannot wind up
-   * ahead of the rate-limited gimbal (which causes overshoot oscillation)
+   * @brief One steering increment. Deadzone and clamping applied.
    * @return how far to move the gimbal command this camera frame in rad
    */
   double steering_step(double error) const {
+    if (std::abs(error) < steering_deadband_) {
+      return 0.0;
+    }
     return std::clamp(acquire_gain_ * error, -acquire_step_limit_, acquire_step_limit_);
   }
 
@@ -124,6 +128,8 @@ private:
   // maximum gimbal command change per camera frame. should be slightly lower than
   // the gimbal's physical rate limit to avoid overshoot oscillation.
   double acquire_step_limit_;
+  // [rad] below this the gimbal holds still to prevent unnecessary oscillations at steady state.
+  double steering_deadband_;
   CoarseAxis azimuth_;
   CoarseAxis elevation_;
   uint8_t mode_{ModeState::IDLE};

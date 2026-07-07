@@ -17,4 +17,4 @@ COPY justfile justfile
 RUN . /opt/ros/humble/setup.sh && colcon build --symlink-install
 
 RUN echo 'source /ws/install/setup.bash' >> /root/.bashrc
-CMD ["bash"]
+CMD ["source /root/.bashrc; bash"]

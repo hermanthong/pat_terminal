@@ -114,6 +114,7 @@ flowchart LR
 #### coarse_controller
 - Owns the gimbal
 - In ACQUIRE and HANDOFF, steers the gimbal to center the spot using the camera position error
+- Steering has a deadband (0.2 mrad): below it the gimbal holds and the residual belongs to the FSM alone. This is to prevent unnecessary gimbal oscillation during a lock.
 - In LOCK, offloads the FSM's average deflection instead (τ ≈ 1 s low-pass), so the FSM re-centers
   
 #### mode_manager
@@ -308,7 +309,20 @@ A single node owns the ground truth: the true pointing error per axis.
 1. Adding more IMU glitches to the test suite.
 
 ### Run instructions
+1. install docker dependencies
+1. build the docker image: `just build_docker`
 1. run the docker: `just run_docker`
 1. run the simulation: `just launch`
 1. attach to the docker in another terminal: `just attach`
 1. command PAT to ACQUIRE: `just set_mode 1`
+
+### Results
+
+![PAT Integration Test Error Plot](docs/pat_demo_run.png)
+
+This demo run was recorded by `just plot`, which runs the integration test and records it, so the figure shows exactly the run the test suite asserts.
+
+- **ACQUIRE**: the gimbal slews down 100 / 50 mrad of initial offset at its rate limit, steered by the camera alone
+- **HANDOFF → LOCK**: once the error is within the FSM's authority, the fine loop closes and the lock debounce passes.
+- **LOCK**: the FSM holds the true error within ~±20 µrad against the 2 Hz and 7 Hz platform vibration
+- **COAST** (the narrow red band): a scripted blockage blinds the camera. The FSM keeps rejecting vibration on IMU dead-reckoning alone, and the error stays bounded until the spot returns.
