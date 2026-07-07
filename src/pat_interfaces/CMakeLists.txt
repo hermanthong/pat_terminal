@@ -7,6 +7,10 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ModeState.msg"
+  "msg/PositionError.msg"
+  "msg/AxisState.msg"
+  "msg/AxisCommand.msg"
+  "srv/SetMode.srv"
   DEPENDENCIES std_msgs
 )
 
